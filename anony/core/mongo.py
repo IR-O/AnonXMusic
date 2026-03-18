@@ -282,6 +282,44 @@ class MongoDB:
         doc = await self.cache.find_one({"_id": "sudoers"})
         return doc.get("user_ids", []) if doc else []
 
+    # 🔥 PLAYLIST METHODS
+
+    async def get_playlist(self, user_id: int) -> list:
+        """Get user playlist"""
+        doc = await self.db.playlist.find_one({"_id": user_id})
+        return doc.get("songs", []) if doc else []
+
+    async def set_playlist(self, user_id: int, songs: list) -> None:
+        """Save/update user playlist"""
+        await self.db.playlist.update_one(
+            {"_id": user_id},
+            {"$set": {"songs": songs}},
+            upsert=True,
+        )
+
+    async def add_to_playlist(self, user_id: int, song: dict) -> None:
+        """Add single song"""
+        await self.db.playlist.update_one(
+            {"_id": user_id},
+            {"$push": {"songs": song}},
+            upsert=True,
+        )
+
+    async def remove_from_playlist(self, user_id: int, index: int) -> bool:
+        """Remove song by index"""
+        data = await self.get_playlist(user_id)
+
+        if not data or index < 0 or index >= len(data):
+            return False
+
+        data.pop(index)
+        await self.set_playlist(user_id, data)
+        return True
+
+    async def clear_playlist(self, user_id: int) -> None:
+        """Clear playlist"""
+        await self.db.playlist.delete_one({"_id": user_id})
+    
     # USER METHODS
     async def is_user(self, user_id: int) -> bool:
         return user_id in self.users
