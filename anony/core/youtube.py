@@ -1,9 +1,12 @@
+# Copyright (c) 2025 AnonymousX1025
+# Licensed under the MIT License.
+
 import os
 import re
+import yt_dlp
 import random
 import asyncio
 import aiohttp
-import yt_dlp
 from pathlib import Path
 
 from py_yt import Playlist, VideosSearch
@@ -20,7 +23,7 @@ class YouTube:
         self.checked = False
         self.warned = False
 
-        # 🔥 API SYSTEM (Lustify style)
+        # 🔥 API SYSTEM
         self.API_URL = None
         self.FALLBACK_API = "https://shrutibots.site"
 
@@ -30,11 +33,15 @@ class YouTube:
             r"([A-Za-z0-9_-]{11}|PL[A-Za-z0-9_-]+)"
         )
 
-    # 🔥 LOAD API URL DYNAMIC
+    # ✅ FIX: Dummy cookies function (ERROR SOLVED)
+    async def save_cookies(self, urls: list[str]) -> None:
+        logger.info("Cookies disabled (Streaming/API mode)")
+        return
+
+    # 🔥 LOAD API
     async def load_api(self):
         if self.API_URL:
             return
-
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -43,13 +50,13 @@ class YouTube:
                 ) as resp:
                     if resp.status == 200:
                         self.API_URL = (await resp.text()).strip()
-                        logger.info("API loaded")
+                        logger.info("API Loaded")
                     else:
                         self.API_URL = self.FALLBACK_API
         except:
             self.API_URL = self.FALLBACK_API
 
-    # 🔥 SEARCH SAME
+    # 🔍 SEARCH
     async def search(self, query: str, m_id: int, video: bool = False):
         try:
             results = await VideosSearch(query, limit=1).next()
@@ -72,7 +79,7 @@ class YouTube:
             )
         return None
 
-    # 🔥 PLAYLIST SAME
+    # 📂 PLAYLIST
     async def playlist(self, limit: int, user: str, url: str, video: bool):
         tracks = []
         try:
@@ -95,7 +102,25 @@ class YouTube:
             pass
         return tracks
 
-    # 🔥 MAIN DOWNLOAD (LUSTIFY STYLE)
+    # 🔥 DIRECT STREAM URL (NO DOWNLOAD)
+    async def stream(self, video_id: str):
+        url = self.base + video_id
+
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "quiet": True,
+            "geo_bypass": True,
+            "nocheckcertificate": True,
+        }
+
+        def extract():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info["url"]
+
+        return await asyncio.to_thread(extract)
+
+    # 🔥 DOWNLOAD (API + FALLBACK)
     async def download(self, video_id: str, video: bool = False):
         await self.load_api()
 
@@ -123,9 +148,6 @@ class YouTube:
                     data = await r.json()
                     token = data.get("download_token")
 
-                    if not token:
-                        raise Exception("No token")
-
                     stream_url = f"{self.API_URL}/stream/{video_id}?type={'video' if video else 'audio'}"
 
                     async with session.get(
@@ -145,7 +167,7 @@ class YouTube:
         except Exception as e:
             logger.warning(f"API failed: {e}")
 
-        # 🔥 FALLBACK yt-dlp (SAFE MODE)
+        # 🔥 FALLBACK yt-dlp
         try:
             url = self.base + video_id
 
