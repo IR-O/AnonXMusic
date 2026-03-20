@@ -95,17 +95,34 @@ async def clear_playlist(_, m: types.Message):
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
+    from anony import queue, anon
+
     playlist = await get_playlist(m.from_user.id)
 
     if not playlist:
         return await m.reply_text("❌ Playlist empty")
 
     chat_id = m.chat.id
+    msg = await m.reply_text("⏳ Starting playlist...")
+
+    first = True
 
     for song in playlist:
         track = await yt.search(song["id"], m.id)
-        if track:
-            from anony import queue
+
+        if not track:
+            continue
+
+        if first:
+            first = False
+
+            # 🔥 FIRST SONG → VC JOIN + PLAY
+            await anon.play_media(
+                chat_id=chat_id,
+                message=msg,
+                media=track
+            )
+        else:
             queue.add(chat_id, track)
 
-    await m.reply_text("▶️ Playlist added to queue")
+    await msg.edit_text("▶️ Playlist started")
