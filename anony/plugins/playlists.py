@@ -2,10 +2,9 @@
 # Licensed under the MIT License.
 
 from pyrogram import filters, types
-import asyncio
 
 from anony import app, db, lang, yt
-from anony.helpers import buttons
+from anony.helpers import utils
 
 
 # 🔥 GET USER PLAYLIST
@@ -18,7 +17,7 @@ async def save_playlist(user_id, playlist):
     await db.set_playlist(user_id, playlist)
 
 
-# 🔥 ADD TO PLAYLIST
+# 🔥 ADD TO PLAYLIST (MANUAL)
 @app.on_message(filters.command("addplaylist"))
 @lang.language()
 async def add_playlist(_, m: types.Message):
@@ -33,6 +32,10 @@ async def add_playlist(_, m: types.Message):
 
     playlist = await get_playlist(m.from_user.id)
 
+    # ❌ Duplicate check
+    if any(s["id"] == result.id for s in playlist):
+        return await m.reply_text("⚠️ Already in playlist")
+
     playlist.append({
         "title": result.title,
         "id": result.id,
@@ -42,7 +45,7 @@ async def add_playlist(_, m: types.Message):
 
     await save_playlist(m.from_user.id, playlist)
 
-    await m.reply_text(f"✅ Added:\n{result.title}")
+    await m.reply_text(f"✅ Added to playlist:\n{result.title}")
 
 
 # 🔥 SHOW PLAYLIST
@@ -52,9 +55,10 @@ async def show_playlist(_, m: types.Message):
     playlist = await get_playlist(m.from_user.id)
 
     if not playlist:
-        return await m.reply_text("❌ Playlist empty")
+        return await m.reply_text("❌ Your playlist is empty")
 
-    text = "🎶 Playlist:\n\n"
+    text = "🎶 Your Playlist:\n\n"
+
     for i, song in enumerate(playlist, start=1):
         text += f"{i}. {song['title']} ({song['duration']})\n"
 
@@ -92,7 +96,7 @@ async def clear_playlist(_, m: types.Message):
     await m.reply_text("🧹 Playlist cleared")
 
 
-# 🔥 PLAY PLAYLIST (FINAL FIXED)
+# 🔥 PLAY PLAYLIST (FIXED)
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
@@ -106,53 +110,30 @@ async def play_playlist(_, m: types.Message):
     chat_id = m.chat.id
     msg = await m.reply_text("⏳ Starting playlist...")
 
-    first_track = None
-    added = 0
+    first = True
 
-    # 🔥 FIRST TRACK + QUEUE
     for song in playlist:
         track = await yt.search(song["id"], m.id)
 
         if not track:
             continue
 
-        if not first_track:
-            first_track = track
+        if first:
+            first = False
+
+            # 🔥 FIRST SONG → VC JOIN + PLAY
+            await anon.play_media(
+                chat_id=chat_id,
+                message=msg,
+                media=track
+            )
         else:
             queue.add(chat_id, track)
-            added += 1
 
-    if not first_track:
-        return await msg.edit_text("❌ No playable songs")
-
-    # 🔥 TRY PLAY (SAFE)
-    try:
-        await anon.play_media(
-            chat_id=chat_id,
-            message=msg,
-            media=first_track
-        )
-
-        await asyncio.sleep(1)
-
-        await msg.edit_reply_markup(
-            reply_markup=buttons.controls(chat_id, track_id=first_track.id)
-        )
-
-        added += 1
-        await msg.edit_text(f"▶️ Playlist started ({added} songs)")
-
-    except Exception:
-        return await msg.edit_text(
-            "❌ VC join failed\n\n"
-            "👉 Make sure:\n"
-            "• Voice chat started\n"
-            "• Assistant added\n"
-            "• Assistant admin hai"
-        )
+    await msg.edit_text("▶️ Playlist started")
 
 
-# 🔥 SAVE BUTTON CALLBACK
+# 🔥 SAVE BUTTON CALLBACK (MAIN FEATURE)
 @app.on_callback_query(filters.regex(r"^controls save"))
 async def save_cb(_, cb):
     data = cb.data.split()
@@ -166,21 +147,21 @@ async def save_cb(_, cb):
     track = await yt.search(track_id, cb.message.id)
 
     if not track:
-        return await cb.answer("❌ Not found", show_alert=True)
+        return await cb.answer("❌ Song not found", show_alert=True)
 
     playlist = await get_playlist(user_id)
 
-    # 🔥 DUPLICATE CHECK
-    if any(song["id"] == track.id for song in playlist):
-        return await cb.answer("⚠ Already saved", show_alert=True)
+    # ❌ Duplicate check
+    if any(s["id"] == track.id for s in playlist):
+        return await cb.answer("⚠️ Already in playlist", show_alert=True)
 
-    playlist.append({
+    song = {
         "title": track.title,
         "id": track.id,
         "duration": track.duration,
         "url": track.url,
-    })
+    }
 
-    await save_playlist(user_id, playlist)
+    await db.add_to_playlist(user_id, song)
 
     await cb.answer("✅ Saved to playlist", show_alert=True)
