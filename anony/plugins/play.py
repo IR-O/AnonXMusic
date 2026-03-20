@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from pathlib import Path
+import asyncio  # 🔥 IMPORTANT
 
 from pyrogram import filters, types
 
@@ -136,10 +137,13 @@ async def play_hndlr(
             await sent.edit_text(m.lang["play_downloading"])
             file.file_path = await yt.download(file.id, video=video)
 
-    # 🔥 PLAY
+    # 🔥 PLAY (MAIN FIX)
     await anon.play_media(chat_id=m.chat.id, message=sent, media=file)
 
-    # 🔥 ADD BUTTONS (SAVE WORKING)
+    # 🔥 DELAY (VERY IMPORTANT FIX FOR VC JOIN)
+    await asyncio.sleep(1)
+
+    # 🔥 ADD BUTTONS
     await sent.edit_reply_markup(
         reply_markup=buttons.controls(m.chat.id, track_id=file.id)
     )
