@@ -20,6 +20,7 @@ class Inline:
     def controls(
         self,
         chat_id: int,
+        track_id: str = None,   # 🔥 ADD THIS
         status: str = None,
         timer: str = None,
         remove: bool = False,
@@ -59,7 +60,7 @@ class Inline:
                         style=enums.ButtonStyle.DANGER   # 🔴
                     ),
                     self.ikb(
-                        text="⦿",
+                        text="⥁",
                         callback_data=f"controls replay {chat_id}",
                         style=enums.ButtonStyle.DEFAULT  # ⚪
                     ),
@@ -86,7 +87,7 @@ class Inline:
                 [
                     self.ikb(
                         text="Save ⟡",
-                        callback_data=f"controls save {chat_id}",
+                        callback_data=f"controls save {chat_id} {track_id}",
                         style=enums.ButtonStyle.DEFAULT  # ⚪
                     )
                 ]
