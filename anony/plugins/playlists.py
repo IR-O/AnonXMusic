@@ -92,7 +92,7 @@ async def clear_playlist(_, m: types.Message):
     await m.reply_text("🧹 Playlist cleared")
 
 
-# 🔥 PLAY PLAYLIST (ULTIMATE FIX)
+# 🔥 PLAY PLAYLIST (FINAL FIXED)
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
@@ -104,36 +104,35 @@ async def play_playlist(_, m: types.Message):
         return await m.reply_text("❌ Playlist empty")
 
     chat_id = m.chat.id
-    msg = await m.reply_text("⏳ Loading playlist...")
-
-    # 🔥 CHECK VC RUNNING
-    is_playing = await db.get_call(chat_id)
+    msg = await m.reply_text("⏳ Starting playlist...")
 
     first_track = None
     added = 0
 
+    # 🔥 FIRST TRACK + QUEUE
     for song in playlist:
         track = await yt.search(song["id"], m.id)
 
         if not track:
             continue
 
-        # 🔥 IF VC बंद है → पहला song play होगा
-        if not is_playing and not first_track:
+        if not first_track:
             first_track = track
         else:
             queue.add(chat_id, track)
             added += 1
 
-    # 🔥 VC START (ONLY IF NOT RUNNING)
-    if not is_playing and first_track:
+    if not first_track:
+        return await msg.edit_text("❌ No playable songs")
+
+    # 🔥 TRY PLAY (SAFE)
+    try:
         await anon.play_media(
             chat_id=chat_id,
             message=msg,
             media=first_track
         )
 
-        # 🔥 DELAY FIX
         await asyncio.sleep(1)
 
         await msg.edit_reply_markup(
@@ -143,9 +142,14 @@ async def play_playlist(_, m: types.Message):
         added += 1
         await msg.edit_text(f"▶️ Playlist started ({added} songs)")
 
-    else:
-        # 🔥 IMPORTANT → current song disturb नहीं होगा
-        await msg.edit_text(f"➕ Playlist added to queue ({added} songs)")
+    except Exception:
+        return await msg.edit_text(
+            "❌ VC join failed\n\n"
+            "👉 Make sure:\n"
+            "• Voice chat started\n"
+            "• Assistant added\n"
+            "• Assistant admin hai"
+        )
 
 
 # 🔥 SAVE BUTTON CALLBACK
