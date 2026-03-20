@@ -2,9 +2,10 @@
 # Licensed under the MIT License.
 
 from pyrogram import filters, types
+import asyncio
 
 from anony import app, db, lang, yt
-from anony.helpers import utils, buttons
+from anony.helpers import buttons
 
 
 # 🔥 GET USER PLAYLIST
@@ -17,7 +18,7 @@ async def save_playlist(user_id, playlist):
     await db.set_playlist(user_id, playlist)
 
 
-# 🔥 ADD TO PLAYLIST (COMMAND)
+# 🔥 ADD TO PLAYLIST
 @app.on_message(filters.command("addplaylist"))
 @lang.language()
 async def add_playlist(_, m: types.Message):
@@ -41,7 +42,7 @@ async def add_playlist(_, m: types.Message):
 
     await save_playlist(m.from_user.id, playlist)
 
-    await m.reply_text(f"✅ Added to playlist:\n{result.title}")
+    await m.reply_text(f"✅ Added:\n{result.title}")
 
 
 # 🔥 SHOW PLAYLIST
@@ -51,10 +52,9 @@ async def show_playlist(_, m: types.Message):
     playlist = await get_playlist(m.from_user.id)
 
     if not playlist:
-        return await m.reply_text("❌ Your playlist is empty")
+        return await m.reply_text("❌ Playlist empty")
 
-    text = "🎶 Your Playlist:\n\n"
-
+    text = "🎶 Playlist:\n\n"
     for i, song in enumerate(playlist, start=1):
         text += f"{i}. {song['title']} ({song['duration']})\n"
 
@@ -92,7 +92,7 @@ async def clear_playlist(_, m: types.Message):
     await m.reply_text("🧹 Playlist cleared")
 
 
-# 🔥 PLAY PLAYLIST (WITH BUTTONS)
+# 🔥 PLAY PLAYLIST (FULL FIX)
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
@@ -106,36 +106,49 @@ async def play_playlist(_, m: types.Message):
     chat_id = m.chat.id
     msg = await m.reply_text("⏳ Starting playlist...")
 
-    first = True
+    # 🔥 FIRST TRACK FIND
+    first_track = None
+
+    for song in playlist:
+        track = await yt.search(song["id"], m.id)
+        if track:
+            first_track = track
+            break
+
+    if not first_track:
+        return await msg.edit_text("❌ No playable songs")
+
+    # 🔥 PLAY FIRST SONG (VC JOIN)
+    await anon.play_media(
+        chat_id=chat_id,
+        message=msg,
+        media=first_track
+    )
+
+    # 🔥 DELAY (VERY IMPORTANT)
+    await asyncio.sleep(1)
+
+    # 🔥 ADD BUTTONS
+    await msg.edit_reply_markup(
+        reply_markup=buttons.controls(chat_id, track_id=first_track.id)
+    )
+
+    # 🔥 ADD REST TO QUEUE
+    count = 1
 
     for song in playlist:
         track = await yt.search(song["id"], m.id)
 
-        if not track:
+        if not track or track.id == first_track.id:
             continue
 
-        if first:
-            first = False
+        queue.add(chat_id, track)
+        count += 1
 
-            # 🔥 PLAY FIRST SONG
-            await anon.play_media(
-                chat_id=chat_id,
-                message=msg,
-                media=track
-            )
-
-            # 🔥 ADD BUTTONS
-            await msg.edit_reply_markup(
-                reply_markup=buttons.controls(chat_id, track_id=track.id)
-            )
-
-        else:
-            queue.add(chat_id, track)
-
-    await msg.edit_text("▶️ Playlist started")
+    await msg.edit_text(f"▶️ Playlist started ({count} songs)")
 
 
-# 🔥 SAVE BUTTON CALLBACK
+# 🔥 SAVE BUTTON CALLBACK (FINAL FIX)
 @app.on_callback_query(filters.regex(r"^controls save"))
 async def save_cb(_, cb):
     data = cb.data.split()
@@ -149,9 +162,13 @@ async def save_cb(_, cb):
     track = await yt.search(track_id, cb.message.id)
 
     if not track:
-        return await cb.answer("❌ Song not found", show_alert=True)
+        return await cb.answer("❌ Not found", show_alert=True)
 
     playlist = await get_playlist(user_id)
+
+    # 🔥 DUPLICATE CHECK
+    if any(song["id"] == track.id for song in playlist):
+        return await cb.answer("⚠ Already saved", show_alert=True)
 
     playlist.append({
         "title": track.title,
