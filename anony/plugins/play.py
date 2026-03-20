@@ -1,7 +1,5 @@
 # Copyright (c) 2025 AnonymousX1025
 # Licensed under the MIT License.
-# This file is part of AnonXMusic
-
 
 from pathlib import Path
 
@@ -20,6 +18,7 @@ def playlist_to_queue(chat_id: int, tracks: list) -> str:
     text = text[:1948] + "</blockquote>"
     return text
 
+
 @app.on_message(
     filters.command(["play", "playforce", "vplay", "vplayforce"])
     & filters.group
@@ -35,19 +34,23 @@ async def play_hndlr(
     video: bool = False,
     url: str = None,
 ) -> None:
+
     sent = await m.reply_text(m.lang["play_searching"])
     file = None
     mention = m.from_user.mention
     media = tg.get_media(m.reply_to_message) if m.reply_to_message else None
     tracks = []
 
+    # 🔹 MEDIA FILE
     if media:
         setattr(sent, "lang", m.lang)
         file = await tg.download(m.reply_to_message, sent)
 
+    # 🔹 M3U8
     elif m3u8:
         file = await tg.process_m3u8(url, sent.id, video)
 
+    # 🔹 LINK / PLAYLIST
     elif url:
         if "playlist" in url:
             await sent.edit_text(m.lang["playlist_fetch"])
@@ -69,26 +72,33 @@ async def play_hndlr(
                 m.lang["play_not_found"].format(config.SUPPORT_CHAT)
             )
 
+    # 🔹 SEARCH
     elif len(m.command) >= 2:
         query = " ".join(m.command[1:])
         file = await yt.search(query, sent.id, video=video)
+
         if not file:
             return await sent.edit_text(
                 m.lang["play_not_found"].format(config.SUPPORT_CHAT)
             )
 
+    # ❌ NOTHING
     if not file:
         return await sent.edit_text(m.lang["play_usage"])
 
+    # ⏱ LIMIT
     if file.duration_sec > config.DURATION_LIMIT:
         return await sent.edit_text(
             m.lang["play_duration_limit"].format(config.DURATION_LIMIT // 60)
         )
 
+    # 🔹 LOG
     if await db.is_logger():
         await utils.play_log(m, sent.link, file.title, file.duration)
 
     file.user = mention
+
+    # 🔹 QUEUE
     if force:
         queue.force_add(m.chat.id, file)
     else:
@@ -107,6 +117,7 @@ async def play_hndlr(
                     m.chat.id, file.id, m.lang["play_now"]
                 ),
             )
+
             if tracks:
                 added = playlist_to_queue(m.chat.id, tracks)
                 await app.send_message(
@@ -115,22 +126,28 @@ async def play_hndlr(
                 )
             return
 
+    # 🔹 DOWNLOAD
     if not file.file_path:
         fname = f"downloads/{file.id}.{'mp4' if video else 'webm'}"
+
         if Path(fname).exists():
             file.file_path = fname
         else:
             await sent.edit_text(m.lang["play_downloading"])
             file.file_path = await yt.download(file.id, video=video)
 
+    # 🔥 PLAY
     await anon.play_media(chat_id=m.chat.id, message=sent, media=file)
 
-await sent.edit_reply_markup(
-    reply_markup=buttons.controls(m.chat.id, track_id=file.id)
-)
+    # 🔥 ADD BUTTONS (SAVE WORKING)
+    await sent.edit_reply_markup(
+        reply_markup=buttons.controls(m.chat.id, track_id=file.id)
+    )
 
-if not tracks:
-    return
+    # 🔹 PLAYLIST QUEUE
+    if not tracks:
+        return
+
     added = playlist_to_queue(m.chat.id, tracks)
     await app.send_message(
         chat_id=m.chat.id,
