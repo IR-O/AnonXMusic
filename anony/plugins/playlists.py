@@ -4,7 +4,7 @@
 from pyrogram import filters, types
 
 from anony import app, db, lang, yt
-from anony.helpers import utils
+from anony.helpers import utils, buttons
 
 
 # 🔥 GET USER PLAYLIST
@@ -17,7 +17,7 @@ async def save_playlist(user_id, playlist):
     await db.set_playlist(user_id, playlist)
 
 
-# 🔥 ADD TO PLAYLIST
+# 🔥 ADD TO PLAYLIST (COMMAND)
 @app.on_message(filters.command("addplaylist"))
 @lang.language()
 async def add_playlist(_, m: types.Message):
@@ -31,6 +31,7 @@ async def add_playlist(_, m: types.Message):
         return await m.reply_text("❌ Song not found")
 
     playlist = await get_playlist(m.from_user.id)
+
     playlist.append({
         "title": result.title,
         "id": result.id,
@@ -91,7 +92,7 @@ async def clear_playlist(_, m: types.Message):
     await m.reply_text("🧹 Playlist cleared")
 
 
-# 🔥 PLAY PLAYLIST
+# 🔥 PLAY PLAYLIST (WITH BUTTONS)
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
@@ -116,13 +117,49 @@ async def play_playlist(_, m: types.Message):
         if first:
             first = False
 
-            # 🔥 FIRST SONG → VC JOIN + PLAY
+            # 🔥 PLAY FIRST SONG
             await anon.play_media(
                 chat_id=chat_id,
                 message=msg,
                 media=track
             )
+
+            # 🔥 ADD BUTTONS
+            await msg.edit_reply_markup(
+                reply_markup=buttons.controls(chat_id, track_id=track.id)
+            )
+
         else:
             queue.add(chat_id, track)
 
     await msg.edit_text("▶️ Playlist started")
+
+
+# 🔥 SAVE BUTTON CALLBACK
+@app.on_callback_query(filters.regex(r"^controls save"))
+async def save_cb(_, cb):
+    data = cb.data.split()
+
+    if len(data) < 4:
+        return await cb.answer("❌ Error", show_alert=True)
+
+    user_id = cb.from_user.id
+    track_id = data[3]
+
+    track = await yt.search(track_id, cb.message.id)
+
+    if not track:
+        return await cb.answer("❌ Song not found", show_alert=True)
+
+    playlist = await get_playlist(user_id)
+
+    playlist.append({
+        "title": track.title,
+        "id": track.id,
+        "duration": track.duration,
+        "url": track.url,
+    })
+
+    await save_playlist(user_id, playlist)
+
+    await cb.answer("✅ Saved to playlist", show_alert=True)
