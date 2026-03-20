@@ -92,7 +92,7 @@ async def clear_playlist(_, m: types.Message):
     await m.reply_text("🧹 Playlist cleared")
 
 
-# 🔥 PLAY PLAYLIST (FULL FIX)
+# 🔥 PLAY PLAYLIST (ULTIMATE FIX)
 @app.on_message(filters.command("playplaylist"))
 @lang.language()
 async def play_playlist(_, m: types.Message):
@@ -104,51 +104,51 @@ async def play_playlist(_, m: types.Message):
         return await m.reply_text("❌ Playlist empty")
 
     chat_id = m.chat.id
-    msg = await m.reply_text("⏳ Starting playlist...")
+    msg = await m.reply_text("⏳ Loading playlist...")
 
-    # 🔥 FIRST TRACK FIND
+    # 🔥 CHECK VC RUNNING
+    is_playing = await db.get_call(chat_id)
+
     first_track = None
-
-    for song in playlist:
-        track = await yt.search(song["id"], m.id)
-        if track:
-            first_track = track
-            break
-
-    if not first_track:
-        return await msg.edit_text("❌ No playable songs")
-
-    # 🔥 PLAY FIRST SONG (VC JOIN)
-    await anon.play_media(
-        chat_id=chat_id,
-        message=msg,
-        media=first_track
-    )
-
-    # 🔥 DELAY (VERY IMPORTANT)
-    await asyncio.sleep(1)
-
-    # 🔥 ADD BUTTONS
-    await msg.edit_reply_markup(
-        reply_markup=buttons.controls(chat_id, track_id=first_track.id)
-    )
-
-    # 🔥 ADD REST TO QUEUE
-    count = 1
+    added = 0
 
     for song in playlist:
         track = await yt.search(song["id"], m.id)
 
-        if not track or track.id == first_track.id:
+        if not track:
             continue
 
-        queue.add(chat_id, track)
-        count += 1
+        # 🔥 IF VC बंद है → पहला song play होगा
+        if not is_playing and not first_track:
+            first_track = track
+        else:
+            queue.add(chat_id, track)
+            added += 1
 
-    await msg.edit_text(f"▶️ Playlist started ({count} songs)")
+    # 🔥 VC START (ONLY IF NOT RUNNING)
+    if not is_playing and first_track:
+        await anon.play_media(
+            chat_id=chat_id,
+            message=msg,
+            media=first_track
+        )
+
+        # 🔥 DELAY FIX
+        await asyncio.sleep(1)
+
+        await msg.edit_reply_markup(
+            reply_markup=buttons.controls(chat_id, track_id=first_track.id)
+        )
+
+        added += 1
+        await msg.edit_text(f"▶️ Playlist started ({added} songs)")
+
+    else:
+        # 🔥 IMPORTANT → current song disturb नहीं होगा
+        await msg.edit_text(f"➕ Playlist added to queue ({added} songs)")
 
 
-# 🔥 SAVE BUTTON CALLBACK (FINAL FIX)
+# 🔥 SAVE BUTTON CALLBACK
 @app.on_callback_query(filters.regex(r"^controls save"))
 async def save_cb(_, cb):
     data = cb.data.split()
